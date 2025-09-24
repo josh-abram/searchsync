@@ -1,0 +1,274 @@
+name: Build and Release SearchSync
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump_type:
+        description: "Which part of the version to bump"
+        required: false
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    env:
+      BUMP_TYPE: ${{ github.event.inputs.bump_type || 'patch' }}
+    outputs:
+      version: ${{ steps.determine.outputs.version }}
+      tag: ${{ steps.create_tag.outputs.tag }}
+      commit: ${{ steps.commit.outputs.commit_sha }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref_name }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Sync with remote branch
+        env:
+          BRANCH: ${{ github.ref_name }}
+        run: git pull --ff-only origin "$BRANCH"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Determine next version
+        id: determine
+        run: |
+          set -eo pipefail
+          BUMP_TYPE=${BUMP_TYPE:-patch}
+          case "$BUMP_TYPE" in
+            major|minor|patch)
+              echo "Selected bump type: $BUMP_TYPE"
+              ;;
+            *)
+              echo "Invalid bump type: $BUMP_TYPE"
+              exit 1
+              ;;
+          esac
+          current_pkg=$(node -p "require('./package.json').version")
+          echo "Current package.json version: $current_pkg"
+          last_tag=$(git tag --list 'v*.*.*' | sort -V | tail -n1)
+          if [ -n "$last_tag" ]; then
+            last_tag_version=${last_tag#v}
+            echo "Latest tag version: $last_tag_version"
+          else
+            last_tag_version=""
+            echo "No existing version tags found"
+          fi
+          if [ -n "$last_tag_version" ]; then
+            highest=$(printf '%s\n%s\n' "$current_pkg" "$last_tag_version" | sort -V | tail -n1)
+          else
+            highest="$current_pkg"
+          fi
+          IFS='.' read -r major minor patch <<< "$highest"
+          if [ -z "$major" ] || [ -z "$minor" ] || [ -z "$patch" ]; then
+            echo "Unable to parse version from: $highest"
+            exit 1
+          fi
+          case "$BUMP_TYPE" in
+            major)
+              next_major=$((major + 1))
+              next_minor=0
+              next_patch=0
+              ;;
+            minor)
+              next_major=$major
+              next_minor=$((minor + 1))
+              next_patch=0
+              ;;
+            patch)
+              next_major=$major
+              next_minor=$minor
+              next_patch=$((patch + 1))
+              ;;
+          esac
+          next_version="$next_major.$next_minor.$next_patch"
+          echo "Next version: $next_version"
+          echo "version=$next_version" >> "$GITHUB_OUTPUT"
+
+      - name: Update package version
+        env:
+          NEXT_VERSION: ${{ steps.determine.outputs.version }}
+        run: npm version "$NEXT_VERSION" --no-git-tag-version
+
+      - name: Commit version bump
+        id: commit
+        env:
+          NEXT_VERSION: ${{ steps.determine.outputs.version }}
+        run: |
+          git add package.json package-lock.json
+          if git diff --cached --quiet; then
+            echo "No changes detected; using existing commit."
+            COMMIT_SHA=$(git rev-parse HEAD)
+          else
+            git commit -m "chore(release): bump version to ${NEXT_VERSION}"
+            COMMIT_SHA=$(git rev-parse HEAD)
+          fi
+          echo "commit_sha=${COMMIT_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Push changes
+        env:
+          BRANCH: ${{ github.ref_name }}
+        run: git push origin HEAD:"$BRANCH"
+
+      - name: Create and push tag
+        id: create_tag
+        env:
+          NEXT_VERSION: ${{ steps.determine.outputs.version }}
+        run: |
+          TAG="v${NEXT_VERSION}"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists"
+            exit 1
+          fi
+          git tag "$TAG"
+          git push origin "$TAG"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: prepare
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win
+            build_command: npm run build:win
+            artifact_path: dist/*.exe
+          - os: ubuntu-latest
+            platform: linux
+            build_command: npm run build:linux
+            artifact_path: dist/*.AppImage
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: 'package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        run: ${{ matrix.build_command }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: searchsync-${{ matrix.platform }}
+          path: ${{ matrix.artifact_path }}
+          retention-days: 30
+          if-no-files-found: error
+
+  release:
+    needs:
+      - prepare
+      - build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: searchsync-win
+          path: ./artifacts/win/
+
+      - name: Download Linux artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: searchsync-linux
+          path: ./artifacts/linux/
+
+      - name: List all artifacts (debug)
+        run: |
+          echo "All downloaded artifacts:"
+          find ./artifacts -type f -exec ls -la {} \;
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prepare.outputs.tag }}
+          name: SearchSync ${{ needs.prepare.outputs.version }}
+          body: |
+            ## SearchSync ${{ needs.prepare.outputs.version }}
+
+            ### Downloads
+            - **Windows**: Download the `.exe` file below
+            - **Linux**: Download the `.AppImage` file below
+
+            ### Installation
+            - **Windows**: Run the installer and follow the setup wizard
+            - **Linux**: Make the AppImage executable (`chmod +x SearchSync-*.AppImage`) and run it
+
+            ### Changes
+            This release was generated automatically from the latest code on ${{ github.ref_name }}.
+          files: |
+            ./artifacts/win/*.exe
+            ./artifacts/linux/*.AppImage
+          draft: false
+          prerelease: false
+
+  update-latest-info:
+    needs:
+      - prepare
+      - release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Create latest release info JSON
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          cat > latest-release.json << EOF
+          {
+            "version": "${VERSION}",
+            "tag_name": "${TAG}",
+            "published_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "html_url": "https://github.com/${REPOSITORY}/releases/tag/${TAG}",
+            "assets": {
+              "windows": {
+                "name": "SearchSync-${VERSION}-win-x64.exe",
+                "download_url": "https://github.com/${REPOSITORY}/releases/download/${TAG}/SearchSync-${VERSION}-win-x64.exe",
+                "size": "TBD"
+              },
+              "linux": {
+                "name": "SearchSync-${VERSION}-linux-x86_64.AppImage",
+                "download_url": "https://github.com/${REPOSITORY}/releases/download/${TAG}/SearchSync-${VERSION}-linux-x86_64.AppImage",
+                "size": "TBD"
+              }
+            }
+          }
+          EOF
+
+      - name: Upload latest release info
+        uses: actions/upload-artifact@v4
+        with:
+          name: latest-release-info
+          path: latest-release.json
+          retention-days: 365

@@ -1,0 +1,83 @@
+{
+  "name": "searchsync",
+  "version": "0.1.1",
+  "description": "A unified search interface for multiple business applications",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "NODE_ENV=development electron .",
+    "dev-win": "set NODE_ENV=development && electron .",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win",
+    "build:linux": "electron-builder --linux",
+    "build:all": "electron-builder --win --linux",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "keywords": [
+    "search",
+    "jira",
+    "azure-devops",
+    "productivity"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^38.1.0",
+    "electron-builder": "^26.0.12"
+  },
+  "dependencies": {
+    "auto-launch": "^5.0.6",
+    "axios": "^1.12.2",
+    "electron-store": "^10.1.0",
+    "keytar": "^7.9.0"
+  },
+  "resolutions": {
+    "glob": "^8.1.0",
+    "inflight": "^2.0.1",
+    "boolean": "^3.2.0"
+  },
+  "build": {
+    "appId": "com.searchsync.app",
+    "productName": "SearchSync",
+    "directories": {
+      "output": "dist"
+    },
+    "publish": null,
+    "files": [
+      "src/**/*",
+      "node_modules/**/*"
+    ],
+    "icon": "src/assets/icon.png",
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "${productName}-${version}-win-${arch}.${ext}",
+      "icon": "src/assets/icon.png"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "${productName}-${version}-linux-${arch}.${ext}",
+      "category": "Office",
+      "icon": "src/assets/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  }
+}

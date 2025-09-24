@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self';
+    style-src 'self' 'unsafe-inline';
+    img-src 'self' data: https:;
+    font-src 'self' data:;
+    connect-src 'self';
+    object-src 'none';
+    base-uri 'self';
+    form-action 'none';
+    frame-ancestors 'none';
+  ">
+  <meta http-equiv="X-Content-Type-Options" content="nosniff">
+  <meta http-equiv="X-Frame-Options" content="DENY">
+  <title>SearchSync Settings</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="settings.js" defer></script>
+  <style>
+    /* Settings-specific styles */
+    body {
+      padding: var(--spacing-lg) var(--spacing-xl);
+      min-height: 100vh;
+      overflow-y: auto;
+    }
+
+    h1 {
+      margin-top: 0;
+      margin-bottom: var(--spacing-lg);
+      font-size: 26px;
+      background: var(--primary-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      display: inline-block;
+    }
+
+    .settings-container {
+      max-width: 800px;
+      margin: 0 auto;
+      background-color: var(--surface-color);
+      padding: var(--spacing-xl);
+      border-radius: var(--border-radius-md);
+      box-shadow: 0 4px 20px var(--shadow-color);
+      border: 1px solid var(--border-color);
+    }
+
+    .section {
+      margin-bottom: var(--spacing-xl);
+      padding-bottom: var(--spacing-xl);
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .section:last-child {
+      border-bottom: none;
+      margin-bottom: 0;
+      padding-bottom: 0;
+    }
+
+    h2 {
+      margin-top: 0;
+      margin-bottom: var(--spacing-md);
+      font-size: 18px;
+      color: var(--primary-color);
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-xs);
+    }
+
+    h2 svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .form-group {
+      margin-bottom: var(--spacing-lg);
+      transition: opacity 0.3s ease;
+    }
+
+    .form-group.disabled {
+      opacity: 0.6;
+    }
+
+    label {
+      display: block;
+      margin-bottom: var(--spacing-xs);
+      font-weight: 500;
+      font-size: 14px;
+      color: var(--text-secondary);
+    }
+
+    .checkbox-wrapper {
+      display: flex;
+      align-items: center;
+      margin-bottom: var(--spacing-sm);
+    }
+
+    .save-button {
+      margin-top: var(--spacing-xl);
+      min-width: 120px;
+    }
+
+    .status {
+      margin-top: var(--spacing-md);
+      padding: var(--spacing-md);
+      border-radius: var(--border-radius-sm);
+      display: none;
+      font-size: 14px;
+      animation: fadeIn 0.3s ease;
+    }
+
+    .test-button {
+      background-color: var(--surface-color-alt);
+      color: var(--text-color);
+      border: 1px solid var(--border-color);
+      padding: var(--spacing-xs) var(--spacing-md);
+      border-radius: var(--border-radius-sm);
+      cursor: pointer;
+      font-size: 13px;
+      margin-left: var(--spacing-sm);
+      transition: all 0.2s ease;
+    }
+
+    .test-button:hover {
+      background-color: var(--highlight-color);
+      transform: translateY(-1px);
+    }
+
+    .test-result {
+      margin-left: var(--spacing-sm);
+      font-size: 13px;
+      display: inline-flex;
+      align-items: center;
+      gap: var(--spacing-xs);
+    }
+
+    .test-result.testing {
+      color: var(--text-secondary);
+    }
+
+    .test-result.success {
+      color: var(--success-color);
+      background: none;
+      border: none;
+      display: inline-flex;
+      padding: 0;
+    }
+
+    .test-result.error {
+      color: var(--error-color);
+      background: none;
+      border: none;
+      display: inline-flex;
+      padding: 0;
+    }
+
+    .debug-log {
+      margin-top: var(--spacing-lg);
+      padding: var(--spacing-md);
+      background-color: rgba(0, 0, 0, 0.2);
+      border: 1px solid var(--border-color);
+      border-radius: var(--border-radius-sm);
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 12px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .debug-log-entry {
+      margin-bottom: var(--spacing-xs);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      padding-bottom: var(--spacing-xs);
+    }
+
+    .debug-log-entry:last-child {
+      margin-bottom: 0;
+      border-bottom: none;
+    }
+
+    .debug-log-time {
+      color: var(--text-muted);
+      margin-right: var(--spacing-xs);
+    }
+
+    .debug-log-message {
+      color: var(--text-secondary);
+    }
+
+    .debug-log-error {
+      color: var(--error-color);
+    }
+
+    .card h3 {
+      font-size: 15px;
+      margin-bottom: var(--spacing-sm);
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-xs);
+    }
+
+    .card-actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: var(--spacing-md);
+    }
+
+    /* Select styling */
+    .select-wrapper {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      max-width: 360px;
+      width: 100%;
+    }
+
+    .select-wrapper select {
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      background: linear-gradient(160deg, rgba(30, 41, 59, 0.95), rgba(17, 24, 39, 0.95));
+      border: 1px solid rgba(148, 163, 184, 0.55);
+      color: #f8fafc;
+      padding: 9px 42px 9px 14px;
+      font-size: 14px;
+      line-height: 1.4;
+      border-radius: 8px;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+      width: 100%;
+      cursor: pointer;
+      box-shadow: 0 1px 4px rgba(15, 23, 42, 0.25);
+    }
+
+    .select-wrapper::after {
+      content: '';
+      position: absolute;
+      right: 14px;
+      top: 50%;
+      width: 10px;
+      height: 10px;
+      pointer-events: none;
+      background: linear-gradient(45deg, transparent 50%, #e2e8f0 50%), linear-gradient(135deg, #e2e8f0 50%, transparent 50%);
+      background-position: center;
+      background-size: 10px 10px;
+      transform: translateY(-50%) rotate(90deg);
+      opacity: 0.85;
+    }
+
+    .select-wrapper select:focus {
+      outline: none;
+      border-color: rgba(124, 92, 255, 0.9);
+      box-shadow: 0 0 0 3px rgba(124, 92, 255, 0.35);
+    }
+
+    .select-wrapper select:hover {
+      border-color: rgba(124, 92, 255, 0.8);
+    }
+
+    /* Shortcut input container and recording styles */
+    .shortcut-input-container {
+      display: flex;
+      align-items: center;
+      position: relative;
+    }
+
+    #shortcut {
+      padding-right: 100px; /* Make space for the button */
+    }
+
+    #record-shortcut {
+      position: absolute;
+      right: 5px;
+      background: var(--primary-gradient);
+      color: white;
+      border-radius: var(--border-radius-sm);
+      padding: var(--spacing-xs) var(--spacing-md);
+      font-size: 13px;
+      font-weight: 500;
+      height: 32px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+      border: none;
+    }
+
+    #record-shortcut:hover {
+      background-image: linear-gradient(135deg, var(--primary-hover), var(--primary-color));
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(124, 92, 255, 0.2);
+    }
+
+    #record-shortcut.recording {
+      background: var(--error-color);
+      color: white;
+      animation: pulse 1.5s infinite;
+    }
+
+    #shortcut.recording-active {
+      border-color: var(--error-color);
+      box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.2);
+    }
+
+    /* Accessible link styling for dark mode */
+    .settings-container a {
+      color: var(--primary-color);
+      text-decoration: underline;
+    }
+    .settings-container a:visited {
+      color: var(--primary-color);
+    }
+    .settings-container a:hover {
+      color: var(--primary-hover);
+    }
+  </style>
+</head>
+<body>
+  <div class="settings-container">
+    <h1>SearchSync Settings</h1>
+
+    <div class="section">
+      <h2>General Settings</h2>
+      <div class="form-group">
+        <label for="shortcut">Global Shortcut</label>
+        <div class="shortcut-input-container">
+          <input type="text" id="shortcut" placeholder="CommandOrControl+Shift+Space" readonly>
+          <button id="record-shortcut">Record</button>
+        </div>
+        <small id="shortcut-help">Click 'Record' to set a new keyboard shortcut.</small>
+      </div>
+
+      <div class="form-group">
+        <label>
+          <input type="checkbox" id="minimize-to-tray">
+          Minimize to System Tray
+        </label>
+        <small>When enabled, the app will minimize to the system tray instead of closing when you click the X button.</small>
+      </div>
+
+      <div class="form-group">
+        <label>
+          <input type="checkbox" id="launch-on-start">
+          Launch on System Startup
+        </label>
+        <small>When enabled, SearchSync will automatically start when your computer boots up, hidden in the system tray.</small>
+      </div>
+
+    </div>
+
+    <div class="section">
+      <h2>Jira Service Desk Integration</h2>
+      <div class="form-group">
+        <label>
+          <input type="checkbox" id="jira-enabled">
+          Enable Jira Integration
+        </label>
+      </div>
+      <div class="form-group">
+        <label for="jira-base-url">Jira Base URL</label>
+        <input type="text" id="jira-base-url" placeholder="https://your-domain.atlassian.net">
+      </div>
+      <div class="form-group">
+        <label for="jira-email">Jira Email Address</label>
+        <input type="text" id="jira-email" placeholder="Your Atlassian account email">
+        <small>This is the email address you use to log in to Atlassian</small>
+      </div>
+      <div class="form-group">
+        <label for="jira-api-token">Jira API Token</label>
+        <input type="password" id="jira-api-token" placeholder="Your Jira API token">
+        <small>Generate an API token: <a href="#" id="jira-token-link">Atlassian API tokens</a></small>
+      </div>
+      <div class="form-group">
+        <label for="jira-search-shortcut">Search Shortcut</label>
+        <input type="text" id="jira-search-shortcut" placeholder="jsd">
+        <small>Type this prefix before your search query to search only in Jira (e.g., "jsd find ticket")</small>
+      </div>
+      <div class="form-group">
+        <label for="jira-product-type">Jira Product</label>
+        <div class="select-wrapper">
+          <select id="jira-product-type">
+            <option value="jira">Jira Software / Work Management</option>
+            <option value="serviceDesk">Jira Service Management</option>
+          </select>
+        </div>
+        <small>Select Service Management if you only use Jira Service Desk and not core Jira.</small>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Confluence Integration</h2>
+      <div class="form-group">
+        <label>
+          <input type="checkbox" id="confluence-enabled">
+          Enable Confluence Integration
+        </label>
+      </div>
+      <div class="form-group">
+        <label for="confluence-base-url">Confluence Base URL</label>
+        <input type="text" id="confluence-base-url" placeholder="https://your-domain.atlassian.net">
+      </div>
+      <div class="form-group">
+        <label for="confluence-email">Email Address</label>
+        <input type="text" id="confluence-email" placeholder="Your Atlassian account email">
+        <small>This is the email address you use to log in to Atlassian</small>
+      </div>
+      <div class="form-group">
+        <label for="confluence-api-token">API Token</label>
+        <input type="password" id="confluence-api-token" placeholder="Your Atlassian API token">
+        <small>Generate an API token: <a href="#" id="confluence-token-link">Atlassian API tokens</a></small>
+      </div>
+      <div class="form-group">
+        <label for="confluence-space">Space Key (Optional)</label>
+        <input type="text" id="confluence-space" placeholder="Optional: Limit search to specific space">
+        <small>Leave empty to search all spaces you have access to</small>
+      </div>
+      <div class="form-group">
+        <label for="confluence-search-shortcut">Search Shortcut</label>
+        <input type="text" id="confluence-search-shortcut" placeholder="con">
+        <small>Type this prefix before your search query to search only in Confluence (e.g., "con documentation")</small>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Azure DevOps Integration</h2>
+      <div class="form-group">
+        <label>
+          <input type="checkbox" id="azure-enabled">
+          Enable Azure DevOps Integration
+        </label>
+      </div>
+      <div class="form-group">
+        <label for="azure-organization">Organization</label>
+        <input type="text" id="azure-organization" placeholder="Your Azure DevOps organization">
+      </div>
+      <div class="form-group">
+        <label for="azure-project">Project</label>
+        <input type="text" id="azure-project" placeholder="Your Azure DevOps project">
+      </div>
+      <div class="form-group">
+        <label for="azure-token">Personal Access Token</label>
+        <input type="password" id="azure-token" placeholder="Your Azure DevOps PAT">
+        <small>Generate a PAT: <a href="#" id="azure-token-link">Azure DevOps tokens</a></small>
+      </div>
+      <div class="form-group">
+        <label for="azure-search-shortcut">Search Shortcut</label>
+        <input type="text" id="azure-search-shortcut" placeholder="ado">
+        <small>Type this prefix before your search query to search only in Azure DevOps (e.g., "ado work item")</small>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Asana Integration</h2>
+      <div class="form-group">
+        <label>
+          <input type="checkbox" id="asana-enabled">
+          Enable Asana Integration
+        </label>
+      </div>
+      <div class="form-group">
+        <label for="asana-token">Personal Access Token</label>
+        <input type="password" id="asana-token" placeholder="Your Asana Personal Access Token">
+        <small>Generate a PAT: <a href="#" id="asana-token-link">Asana developer apps</a></small>
+      </div>
+      <div class="form-group">
+        <label for="asana-workspace">Workspace ID (Optional)</label>
+        <input type="text" id="asana-workspace" placeholder="Optional: Limit search to specific workspace">
+        <small>Leave empty to search all workspaces you have access to</small>
+      </div>
+      <div class="form-group">
+        <label for="asana-project">Project ID (Optional)</label>
+        <input type="text" id="asana-project" placeholder="Optional: Limit search to specific project">
+        <small>Leave empty to search all projects you have access to</small>
+      </div>
+      <div class="form-group">
+        <label for="asana-search-shortcut">Search Shortcut</label>
+        <input type="text" id="asana-search-shortcut" placeholder="as">
+        <small>Type this prefix before your search query to search only in Asana (e.g., "as task")</small>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Debug & Troubleshooting</h2>
+      <p>Use the connection test buttons below to verify your integrations are configured correctly.</p>
+      <div class="form-group" style="margin-top: 15px;">
+        <label for="test-jira">Test Jira Connection</label>
+        <button id="test-jira" class="test-button">Test</button>
+        <span id="jira-test-result" class="test-result"></span>
+      </div>
+      <div class="form-group">
+        <label for="test-azure">Test Azure DevOps Connection</label>
+        <button id="test-azure" class="test-button">Test</button>
+        <span id="azure-test-result" class="test-result"></span>
+      </div>
+      <div class="form-group">
+        <label for="test-confluence">Test Confluence Connection</label>
+        <button id="test-confluence" class="test-button">Test</button>
+        <span id="confluence-test-result" class="test-result"></span>
+      </div>
+      <div class="form-group">
+        <label for="test-asana">Test Asana Connection</label>
+        <button id="test-asana" class="test-button">Test</button>
+        <span id="asana-test-result" class="test-result"></span>
+      </div>
+      <div id="debug-log" class="debug-log"></div>
+    </div>
+
+    <div id="status" class="status"></div>
+  </div>
+
+</body>
+</html>
